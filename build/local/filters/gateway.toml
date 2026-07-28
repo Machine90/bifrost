@@ -1,0 +1,30 @@
+service_name = "localhost"
+
+# 网关管理接口
+[[api]]
+methods = "GET,POST,DELETE,PUT,HEAD,OPTION"
+path = "/api/v1/gateway/{*rest}"
+roles = ["gateway_admin"]
+
+[[api]]
+method = "GET,POST"
+path = "/api/v1/gateway/privilege/list"
+roles = ["gateway_admin"]
+
+# 列举当前网关平台所有支持的角色 (通常用于角色管理)
+[[api]]
+method = "GET"
+path = "/api/v1/gateway/role/list"
+roles = ["gateway_admin"]
+
+# 用户查看个人当前身份, whoami
+[[api]]
+method = "GET,POST"
+path = "/api/v1/gateway/user/current"
+roles = ["anonymous"]
+
+# 用户查看个人所拥有的资源权限 (最低支持匿名用户查看, 通常可用于前端组件展示)
+[[api]]
+method = "GET"
+path = "/api/v1/gateway/user/privileges"
+roles = ["anonymous"]

@@ -1,0 +1,30 @@
+{
+    "services": [
+        {
+            "service_name": "user-svc",
+            "api": [
+                {
+                    "method": "POST",
+                    "path": "/api/v1/account/register",
+                    "roles": [
+                        "anonymous"
+                    ]
+                },
+                {
+                    "method": "POST",
+                    "path": "/api/v1/account/login",
+                    "roles": [
+                        "anonymous"
+                    ]
+                },
+                {
+                    "method": "GET",
+                    "path": "/api/v1/account/current",
+                    "roles": [
+                        "untagged"
+                    ]
+                }
+            ]
+        }
+    ]
+}

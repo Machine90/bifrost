@@ -1,0 +1,70 @@
+stages:
+  - pre-check
+  - check
+  - test
+  - deploy
+
+variables:
+  DEPLOY_PATH: "/home/bifrost-docker"
+  DIST_FILE_NAME: "bifrost-dist"
+  DEPLOY_DOCKER_CMD: |
+    ssh $TARGET_USER@$TARGET_IP << EOF
+      set -e
+
+      mkdir -p $DEPLOY_PATH
+      rm -rf $DEPLOY_PATH/*
+      tar -zxf /tmp/$DIST_FILE_NAME.tar -C $DEPLOY_PATH
+      cd $DEPLOY_PATH
+      sh deploy_docker.sh
+    EOF
+
+before_script:
+  - . "$HOME/.cargo/env"
+  - export PATH="$PATH:$HOME/.local/bin"
+
+check-rust-fmt:
+  stage: pre-check
+  script:
+    - cargo fmt --all --check
+
+check-rust-compilation:
+  stage: check
+  variables:
+    RUSTFLAGS: "-D warnings"
+  script:
+    - cargo build --release
+    - mkdir ./dist/
+    - cp target/release/bifrost ./dist/
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 day
+
+test-rust:
+  stage: test
+  variables:
+    RUST_MIN_STACK: 80000000
+  script:
+    - cargo install --locked cargo-nextest
+    - cargo nextest run --workspace --no-fail-fast --no-tests pass
+
+deploy-localhost-docker:
+  stage: deploy
+  variables:
+    TARGET_USER: root # replace with your server user
+    TARGET_IP: 127.0.0.1 # replace with your server ip
+  before_script:
+    - chmod 400 $SSH_PRIVATE_KEY_FILE || true
+  script:
+    - cp build/local/Dockerfile dist/
+    - cp build/local/config.toml dist/
+    - cp -R build/local/filters dist/
+    - cp build/deploy_docker.sh dist/
+    # compress dist package
+    - tar -czf $DIST_FILE_NAME.tar -C dist .
+    - scp $DIST_FILE_NAME.tar $TARGET_USER@$TARGET_IP:/tmp/$DIST_FILE_NAME.tar
+    # deploy docker
+    - eval "$DEPLOY_DOCKER_CMD"
+  dependencies:
+    - check-rust-compilation
+  when: manual

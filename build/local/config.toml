@@ -1,0 +1,40 @@
+env = "local"
+
+# 网关管理服务本身本地进程端口，非代理 (proxy_ports) 端口
+gateway_management_server_port = 8080
+# 初始配置允许的用户 ID，作为网关管理员，此 ID 从请求的 cookie 中的 `svc_cookie_access_token_key` 解析获得
+initial_gateway_admin_ids = ["1", "2", "3"]
+# 反向代理的端口，可以设置多值, e.g. [80]
+proxy_ports = [8000]
+server_name_indication = "one.one.one.one"
+# 允许暴露内部服务接口供外部访问, 测试及生产环境建议设置为 `false`, 显式指定接口权限.
+allow_unconfigured_api_exposed = true
+# 指定的静态 filter 规则配置路径
+static_filter_conf_path = "./build/local/filters"
+
+[auth_args]
+# 需要解析的目标 token 名，从 cookie 中获取
+svc_cookie_access_token_key = "access_token"
+svc_cookie_refresh_token_key = "refresh_token"
+roles_header = "X-Bifrost-Roles"
+subject_header = "X-Bifrost-Subject"
+# 用于验证用户身份的服务地址，支持内部服务或直接指定地址: 
+# 直接指定 http 接口: "GET:http://localhost:28081/api/v1/account/current"
+# 指定服务接口: "GET:service://user-svc/api/v1/account/current"
+user_identity_verify_url = "GET:service://user-svc/api/v1/account/current"
+
+# 若配置了 nacos 则从 nacos 同步已注册的内部服务
+[nacos_args]
+nacos_server_address = "localhost:8848"
+nacos_username = "admin"
+nacos_password = "admin"
+cache_service_names_secs = 30
+
+[db_args]
+# 替换实际的 postgresql 连接
+database_url = "postgres://postgres:password@localhost:5432/bifrost"
+
+# 可通过此配置指定 TLS 证书以启用 https
+# [tls_args]
+# cert = "/path/to/your_cert.pem"
+# priv_key = "/path/to/your_private_key.pem"

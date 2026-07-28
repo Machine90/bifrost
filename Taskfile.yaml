@@ -1,0 +1,39 @@
+version: '3'
+
+env:
+  PG_ADDRESS: localhost
+  PG_USER_PASSWD: postgres:qzkbC5KZxkC3p41J4fyJ
+  PG_DATABASE: bifrost
+  DATABASE_URL: postgres://{{.PG_USER_PASSWD}}@{{.PG_ADDRESS}}/{{.PG_DATABASE}}
+
+tasks:
+  install:
+    desc: Setup all dependencies for {{OS}}
+    platforms: [linux, windows, darwin]
+    cmds:
+      - ./scripts/{{OS}}/install_diesel.sh # Install Diesel ORM cli tool [Diesel](https://diesel.rs/guides/getting-started.html)
+
+  migrate:init:
+    dir: '{{.USER_WORKING_DIR}}'
+    cmds:
+      - diesel setup
+  migrate:add:
+    dir: '{{.USER_WORKING_DIR}}'
+    cmds:
+      - diesel migration generate --diff-schema {{.CLI_ARGS}}
+  migrate:run:
+    dir: '{{.USER_WORKING_DIR}}'
+    cmds:
+      - diesel migration run
+  migrate:redo:
+    dir: '{{.USER_WORKING_DIR}}'
+    cmds:
+      - diesel migration redo
+  migrate:list:
+    dir: '{{.USER_WORKING_DIR}}'
+    cmds:
+      - diesel migration list
+  migrate:revert:
+    dir: '{{.USER_WORKING_DIR}}'
+    cmds:
+      - diesel migration revert
