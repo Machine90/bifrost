@@ -2,7 +2,7 @@ version: '3'
 
 env:
   PG_ADDRESS: localhost
-  PG_USER_PASSWD: postgres:qzkbC5KZxkC3p41J4fyJ
+  PG_USER_PASSWD: postgres:password
   PG_DATABASE: bifrost
   DATABASE_URL: postgres://{{.PG_USER_PASSWD}}@{{.PG_ADDRESS}}/{{.PG_DATABASE}}
 
