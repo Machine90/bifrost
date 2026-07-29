@@ -265,7 +265,7 @@ impl HttpProxy {
                     .insert_header(role_header.clone().into_case_header_name(), roles)?;
             }
             if let Some(subject_header) = self.settings.forward_subject_header.as_ref() {
-                let user_subject = user_info.user_subject.get_subject();
+                let user_subject = user_info.user_subject.subject.get_subject_value();
                 session
                     .req_header_mut()
                     .insert_header(subject_header.clone().into_case_header_name(), user_subject)?;

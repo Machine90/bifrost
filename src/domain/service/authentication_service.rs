@@ -1,24 +1,17 @@
 use std::{collections::HashSet, sync::Arc};
 
-use anyhow::Context;
-use http::{
-    HeaderMap,
-    header::{AUTHORIZATION, COOKIE},
-};
+use http::HeaderMap;
 use partialdebug::placeholder::PartialDebug;
 
 use crate::{
-    common::pingora_errors::{forbidden, internal_error},
+    common::pingora_errors::{forbidden, internal_error, to_pingora_error},
     domain::{
         model::{
-            entity::{route_config::RouteConfig, user_info::UserBaseInfo},
-            value::{
-                authorization_header::AuthorizationHeader,
-                platform::Platform,
-                role::Role,
-                subject::Subject,
-                tokens::{Tokens, TokensKind},
+            entity::{
+                route_config::RouteConfig,
+                user_info::{UserBaseInfo, UserSubject},
             },
+            value::{platform::Platform, role::Role, subject::Subject},
         },
         repository::{
             authenticate_repository::AuthenticateRepository, user_repository::UserRepository,
@@ -49,50 +42,28 @@ impl AuthenticationService {
         request_source: &Platform,
         headers: &HeaderMap,
     ) -> pingora::Result<Option<UserBaseInfo>> {
-        let user_cookie = headers.get(COOKIE).map(|v| v.to_str().ok()).flatten();
-        let auth_token = headers
-            .get(AUTHORIZATION)
-            .map(|v| v.to_str().ok())
-            .flatten();
         let settings = Settings::get();
-        let access_token_name = settings.auth_args.svc_cookie_access_token_key.as_ref();
-        let refresh_token_name = settings.auth_args.svc_cookie_refresh_token_key.as_ref();
-
-        let mut tokens = match (user_cookie, access_token_name) {
-            (Some(user_cookie), Some(_)) => {
-                let tokens =
-                    Tokens::from_cookies(user_cookie, access_token_name, refresh_token_name);
-                if tokens.is_empty() {
-                    None
-                } else {
-                    Some(tokens)
-                }
-            }
-            _ => None,
-        };
-
-        if tokens.is_none() && auth_token.is_some() {
-            let auth_header = AuthorizationHeader::try_from(headers)
-                .context("Failed to parse auth token from header")
-                .map_err(|_| forbidden())?;
-            tokens = Some(Tokens::from_auth_header(auth_header)?);
-        }
-
-        let tokens = match tokens {
-            Some(tokens) => tokens,
+        let access_token_name = settings
+            .auth_args
+            .svc_cookie_access_token_key
+            .as_ref()
+            .map(|s| s.as_str());
+        let refresh_token_name = settings
+            .auth_args
+            .svc_cookie_refresh_token_key
+            .as_ref()
+            .map(|s| s.as_str());
+        let user_subject = UserSubject::from_header(headers, access_token_name, refresh_token_name)
+            .map_err(to_pingora_error)?;
+        let user_subject = match user_subject {
+            Some(user_subject) => user_subject,
             None => return Ok(None),
         };
-        let tokens_kind = TokensKind::from(&tokens);
-        let subject = Subject::try_from(&tokens);
-        let subject = match subject {
-            Ok(subject) => subject,
-            // failed to parse subject from token.
-            Err(_) => return Ok(None),
-        };
-        let roles = self.get_user_roles(request_source, &subject).await?;
+        let roles = self
+            .get_user_roles(request_source, &user_subject.subject)
+            .await?;
         Ok(Some(UserBaseInfo {
-            tokens_kind,
-            user_subject: subject,
+            user_subject,
             roles,
         }))
     }
@@ -133,7 +104,7 @@ impl AuthenticationService {
         request_source: &Platform,
         subject: &Subject,
     ) -> pingora::Result<HashSet<Role>> {
-        let user_subject = subject.get_subject();
+        let user_subject = subject.get_subject_value();
         let user = self
             .user_repo
             .get_user_config(user_subject)

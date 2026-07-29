@@ -118,8 +118,8 @@ impl Tokens {
 
     pub fn from_cookies(
         user_cookie: &str,
-        access_token_name: Option<&String>,
-        refresh_token_name: Option<&String>,
+        access_token_name: Option<&str>,
+        refresh_token_name: Option<&str>,
     ) -> Tokens {
         let cookies = Cookie::split_parse(user_cookie);
         let user_tokens = cookies
