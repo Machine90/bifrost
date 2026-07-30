@@ -59,7 +59,11 @@ impl UserSubject {
             let auth_header = AuthorizationHeader::try_from(headers)
                 .context(ErrorKind::Forbidden)
                 .context("Failed to parse auth token from header")?;
-            tokens = Some(Tokens::from_auth_header(auth_header)?);
+            tokens = Some(
+                Tokens::from_auth_header(auth_header)
+                    .context(ErrorKind::Forbidden)
+                    .context("Failed to parse JWT from Authorization")?,
+            );
         }
 
         let tokens = match tokens {

@@ -1,10 +1,12 @@
 use std::{collections::HashSet, sync::Arc};
 
+use anyhow::{Context, Result, bail};
 use http::HeaderMap;
 use partialdebug::placeholder::PartialDebug;
+use tracing::Level;
 
 use crate::{
-    common::pingora_errors::{forbidden, internal_error, to_pingora_error},
+    common::tracing_ext::TracingResultExt,
     domain::{
         model::{
             entity::{
@@ -41,7 +43,7 @@ impl AuthenticationService {
         &self,
         request_source: &Platform,
         headers: &HeaderMap,
-    ) -> pingora::Result<Option<UserBaseInfo>> {
+    ) -> Result<Option<UserBaseInfo>> {
         let settings = Settings::get();
         let access_token_name = settings
             .auth_args
@@ -53,8 +55,11 @@ impl AuthenticationService {
             .svc_cookie_refresh_token_key
             .as_ref()
             .map(|s| s.as_str());
+        println!("--->>> parse user subject");
         let user_subject = UserSubject::from_header(headers, access_token_name, refresh_token_name)
-            .map_err(to_pingora_error)?;
+            .log_if_error(Level::ERROR)
+            .context("Failed to parse subject")?;
+        println!("--->>> {user_subject:?}");
         let user_subject = match user_subject {
             Some(user_subject) => user_subject,
             None => return Ok(None),
@@ -73,13 +78,13 @@ impl AuthenticationService {
         route_config: &RouteConfig,
         request_source: &Platform,
         user_info: &UserBaseInfo,
-    ) -> pingora::Result<()> {
+    ) -> Result<()> {
         let UserBaseInfo { roles, .. } = user_info;
         let allow_user_access = self
             .is_user_allow_access_resource(request_source, route_config, &roles)
             .await?;
         if !allow_user_access {
-            return Err(forbidden());
+            bail!("Permission Denied")
         }
         Ok(())
     }
@@ -91,11 +96,10 @@ impl AuthenticationService {
         &self,
         user_info: &UserBaseInfo,
         request_headers: &HeaderMap,
-    ) -> pingora::Result<()> {
+    ) -> Result<()> {
         self.authenticate_repo
             .verify_user_identity(user_info, request_headers)
-            .await
-            .map_err(|_| forbidden())?;
+            .await?;
         Ok(())
     }
 
@@ -103,13 +107,13 @@ impl AuthenticationService {
         &self,
         request_source: &Platform,
         subject: &Subject,
-    ) -> pingora::Result<HashSet<Role>> {
+    ) -> Result<HashSet<Role>> {
         let user_subject = subject.get_subject_value();
         let user = self
             .user_repo
             .get_user_config(user_subject)
             .await
-            .map_err(|_| internal_error())?;
+            .log_if_error(Level::ERROR)?;
         let roles = match user.map(|config| config.roles(request_source)).flatten() {
             Some(mut user_roles) => {
                 user_roles.insert(Role::Untagged);
@@ -126,7 +130,7 @@ impl AuthenticationService {
         request_source: &Platform,
         route_config: &RouteConfig,
         user_roles: &HashSet<Role>,
-    ) -> pingora::Result<bool> {
+    ) -> Result<bool> {
         let allowed = route_config.is_allowed_roles(request_source, &user_roles);
         Ok(allowed)
     }

@@ -23,8 +23,9 @@ use crate::{
     application::factory,
     common::{
         constants::{customized_headers, http_proxy, http_server},
+        error_types::ErrorKind,
         header_map_ext::GetIgnoreCase,
-        pingora_errors::{forbidden, internal_error, notfound},
+        pingora_errors::to_pingora_error,
         tracing_ext::TracingResultExt,
     },
     domain::model::{
@@ -380,7 +381,11 @@ impl ProxyHttp for HttpProxy {
         ctx.request_from = from_platform;
 
         // try to get client address
-        let address = &session.client_addr().ok_or(forbidden())?;
+        let address = &session
+            .client_addr()
+            .context(ErrorKind::Forbidden)
+            .context("Client IP is missing")
+            .map_err(to_pingora_error)?;
         let real_ip = get_remote_real_ip(&session.req_header().headers, *address);
         ctx.real_ip = real_ip;
 
@@ -456,18 +461,23 @@ impl ProxyHttp for HttpProxy {
                 .map(|ip| ip.get_client_id(&ctx.redirect_target))
                 .unwrap_or("unknown".to_string());
             if !route_config.ratelimit_acquire(client_id, 1) {
-                let mut header = ResponseHeader::build(429, None).map_err(|_| internal_error())?;
+                let mut header = ResponseHeader::build(429, None)
+                    .context("Failed to build response header")
+                    .map_err(to_pingora_error)?;
                 let limit = route_config.ratelimit_max_req_per_seconds();
                 if let Some(limit) = limit {
                     header
                         .insert_header("RateLimit-Limit", limit)
-                        .map_err(|_| internal_error())?;
+                        .context("Failed to set header `RateLimit-Limit`")
+                        .map_err(to_pingora_error)?;
                     header
                         .insert_header("RateLimit-Remaining", "0")
-                        .map_err(|_| internal_error())?;
+                        .context("Failed to set header `RateLimit-Remaining`")
+                        .map_err(to_pingora_error)?;
                     header
                         .insert_header("RateLimit-Reset", "1")
-                        .map_err(|_| internal_error())?;
+                        .context("Failed to set header `RateLimit-Reset`")
+                        .map_err(to_pingora_error)?;
                 }
                 session.set_keepalive(None);
                 session
@@ -481,7 +491,10 @@ impl ProxyHttp for HttpProxy {
         let authentication_svc = factory::get_authentication_svc().await;
         let unchecked_user_info = authentication_svc
             .get_user_info(&ctx.request_from, headers)
-            .await?;
+            .await
+            .context(ErrorKind::Forbidden)
+            .context("Failed to extract user info")
+            .map_err(to_pingora_error)?;
         ctx.user_info = unchecked_user_info;
 
         // step 4: check logged in user identity
@@ -503,7 +516,9 @@ impl ProxyHttp for HttpProxy {
             // if user token exist but is invalid, then forbidden to access.
             return Err(anyhow!("Invalid user"))
                 .log_if_error(Level::DEBUG)
-                .map_err(|_| forbidden())?;
+                .context(ErrorKind::Forbidden)
+                .context("Invalid user")
+                .map_err(to_pingora_error)?;
         }
 
         // step 5: try to get url corresponding configuration
@@ -523,7 +538,9 @@ impl ProxyHttp for HttpProxy {
 
         let route_config = route_config
             .context("Failed to get route config")
-            .map_err(|_| forbidden())?;
+            .context(ErrorKind::Forbidden)
+            .context("Privilege is missing")
+            .map_err(to_pingora_error)?;
 
         // step 6: check the request if allow to access the url.
         let allow_anonymous_to_access =
@@ -533,14 +550,19 @@ impl ProxyHttp for HttpProxy {
         if let Some(user_info) = ctx.user_info.as_ref() {
             authentication_svc
                 .verify_user_access_privilege(route_config.as_ref(), &ctx.request_from, &user_info)
-                .await?;
+                .await
+                .context(ErrorKind::Forbidden)
+                .context("Failed to verify user access privilege")
+                .map_err(to_pingora_error)?;
             // after check privilege, we set `allow_user_to_access` to true.
             allow_user_to_access = true;
         }
 
         let allow_request_access = allow_anonymous_to_access || allow_user_to_access;
         if !allow_request_access {
-            return Err(anyhow!("Invalid request")).map_err(|_| forbidden())?;
+            return Err(anyhow!("Invalid request"))
+                .context(ErrorKind::Forbidden)
+                .map_err(to_pingora_error)?;
         }
         Ok(false)
     }
@@ -562,8 +584,9 @@ impl ProxyHttp for HttpProxy {
         let to_backend = ctx
             .to_backend
             .as_ref()
-            .context("Failed to get target backend")
-            .map_err(|_| notfound())?
+            .context(ErrorKind::NotFound)
+            .context("Backend is missing")
+            .map_err(to_pingora_error)?
             .clone();
         if ctx.log_request_as_info {
             tracing::info!(

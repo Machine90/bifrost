@@ -1,6 +1,6 @@
-use std::{collections::HashSet, fmt::Debug, sync::Arc, u64};
+use std::{collections::HashSet, fmt::Debug, sync::Arc, time::Duration, u64};
 
-use moka2::future::Cache;
+use moka2::{future::Cache, policy::EvictionPolicy};
 
 use crate::domain::model::{
     entity::user_config::UserConfig,
@@ -28,8 +28,14 @@ impl Debug for UserConfigCache {
 impl UserConfigCache {
     pub(crate) fn new(max_capacity: Option<u64>) -> Self {
         let cap = max_capacity.unwrap_or(DEFAULT_MAX_USER_CACHE_ENTRY_COUNT);
+        let cache = Cache::builder()
+            .time_to_live(Duration::from_secs(60 * 60))
+            .time_to_idle(Duration::from_secs(5 * 60))
+            .eviction_policy(EvictionPolicy::tiny_lfu())
+            .max_capacity(cap)
+            .build();
         Self {
-            user_config_map: Arc::new(Cache::new(cap)),
+            user_config_map: Arc::new(cache),
         }
     }
 
