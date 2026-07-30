@@ -71,7 +71,7 @@ impl UserPrivilegeApp {
         roles
             .entry(Platform::Gateway)
             .or_insert(HashSet::new())
-            .insert(Role::Untagged);
+            .extend([Role::Anonymous, Role::Untagged]);
         Ok((Some(user_id), roles))
     }
 
