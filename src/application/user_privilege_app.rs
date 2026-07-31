@@ -82,6 +82,10 @@ impl UserPrivilegeApp {
     ) -> Result<Vec<PrivilegeRule>> {
         let platform = platform.unwrap_or(Platform::Gateway);
         let (_, user_roles) = self.get_user_roles(headers).await?;
+        let is_gateway_admin = user_roles
+            .iter()
+            .find(|(_, roles)| roles.contains(&Role::GatewayAdmin))
+            .is_some();
         let roles = match user_roles.get(&platform) {
             Some(roles) => roles,
             None => return Ok(vec![]),
@@ -95,7 +99,12 @@ impl UserPrivilegeApp {
                 let backend_apis = p
                     .backend_apis
                     .iter()
-                    .filter(|api| api.roles.intersection(roles).count() > 0)
+                    .filter(|api| {
+                        if is_gateway_admin {
+                            return true;
+                        }
+                        api.roles.intersection(roles).count() > 0
+                    })
                     .cloned()
                     .collect::<Vec<_>>();
                 if backend_apis.is_empty() {

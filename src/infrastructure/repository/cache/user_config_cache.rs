@@ -7,7 +7,7 @@ use crate::domain::model::{
     value::{platform::Platform, role::Role},
 };
 
-const DEFAULT_MAX_USER_CACHE_ENTRY_COUNT: u64 = 1_000_000;
+pub(crate) const DEFAULT_MAX_USER_CACHE_ENTRY_COUNT: u64 = 1_000_000;
 
 #[derive(Clone)]
 pub(crate) struct UserConfigCache {
@@ -26,14 +26,20 @@ impl Debug for UserConfigCache {
 }
 
 impl UserConfigCache {
-    pub(crate) fn new(max_capacity: Option<u64>) -> Self {
-        let cap = max_capacity.unwrap_or(DEFAULT_MAX_USER_CACHE_ENTRY_COUNT);
+    pub(crate) fn new_bounded(max_capacity: u64) -> Self {
         let cache = Cache::builder()
             .time_to_live(Duration::from_secs(60 * 60))
             .time_to_idle(Duration::from_secs(5 * 60))
             .eviction_policy(EvictionPolicy::tiny_lfu())
-            .max_capacity(cap)
+            .max_capacity(max_capacity)
             .build();
+        Self {
+            user_config_map: Arc::new(cache),
+        }
+    }
+
+    pub(crate) fn new_unbounded() -> Self {
+        let cache = Cache::builder().build();
         Self {
             user_config_map: Arc::new(cache),
         }
@@ -132,7 +138,7 @@ mod tests {
     #[rstest]
     #[test_log::test(tokio::test(flavor = "multi_thread", worker_threads = 1))]
     async fn test_user_cache() -> Result<()> {
-        let cache = UserConfigCache::new(10.into());
+        let cache = UserConfigCache::new_bounded(10);
         let _ = cache
             .insert_user_config(
                 format!("1"),

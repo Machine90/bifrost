@@ -129,6 +129,10 @@ impl AuthenticationService {
         route_config: &RouteConfig,
         user_roles: &HashSet<Role>,
     ) -> Result<bool> {
+        if user_roles.contains(&Role::GatewayAdmin) {
+            // gateway admin user has all privileges of each platform.
+            return Ok(true);
+        }
         let allowed = route_config.is_allowed_roles(request_source, &user_roles);
         Ok(allowed)
     }
