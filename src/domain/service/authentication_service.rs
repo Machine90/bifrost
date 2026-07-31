@@ -55,11 +55,9 @@ impl AuthenticationService {
             .svc_cookie_refresh_token_key
             .as_ref()
             .map(|s| s.as_str());
-        println!("--->>> parse user subject");
         let user_subject = UserSubject::from_header(headers, access_token_name, refresh_token_name)
             .log_if_error(Level::ERROR)
             .context("Failed to parse subject")?;
-        println!("--->>> {user_subject:?}");
         let user_subject = match user_subject {
             Some(user_subject) => user_subject,
             None => return Ok(None),

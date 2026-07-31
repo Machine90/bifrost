@@ -14,7 +14,7 @@ use pingora::{
     lb::{Backend, LoadBalancer},
     prelude::{HttpPeer, RoundRobin},
     protocols::l4::socket::SocketAddr,
-    proxy::{ProxyHttp, Session},
+    proxy::{FailToProxy, ProxyHttp, Session},
 };
 use real_ip::real_ip;
 use tracing::Level;
@@ -655,5 +655,17 @@ impl ProxyHttp for HttpProxy {
         ctx.tries += 1;
         e.set_retry(true);
         e
+    }
+
+    async fn fail_to_proxy(
+        &self,
+        session: &mut Session,
+        e: &Error,
+        ctx: &mut Self::CTX,
+    ) -> FailToProxy
+    where
+        Self::CTX: Send + Sync,
+    {
+        self.fail_to_proxy_internal(session, e, ctx).await
     }
 }

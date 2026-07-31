@@ -48,7 +48,6 @@ pub fn routes() -> Router {
     let router = privilege_manage_controller::register(router);
     let router = user_manage_controller::register(router);
 
-    let router = router.nest_service("/static", tower_http::services::ServeDir::new("./static"));
     router
         .layer(DefaultBodyLimit::max(MAX_LIMIT_REQUEST_BODY_BYTES))
         .layer(LanguageIdentifierExtractorLayer::new(
