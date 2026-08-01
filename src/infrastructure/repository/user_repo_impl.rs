@@ -19,7 +19,7 @@ use crate::{
     },
     infrastructure::{
         repository::{
-            cache::user_config_cache::UserConfigCache,
+            cache::user_config_cache::{DEFAULT_MAX_USER_CACHE_ENTRY_COUNT, UserConfigCache},
             dao::user_config_dao,
             po::user_config_po::{UserConfigCreatePo, UserConfigQueryPo, UserConfigUpdatePo},
         },
@@ -31,22 +31,26 @@ use crate::{
 pub struct UserRepositoryImpl {
     pg_pool: Arc<PgPool>,
     user_cache: UserConfigCache,
+    gateway_admin_user_cache: UserConfigCache,
 }
 
 impl UserRepositoryImpl {
     pub async fn new(pg_pool: Arc<PgPool>, initial_gateway_admin_ids: Vec<String>) -> Self {
-        let user_cache = UserConfigCache::new(None);
+        let user_cache = UserConfigCache::new_bounded(DEFAULT_MAX_USER_CACHE_ENTRY_COUNT);
+        let gateway_admin_user_cache = UserConfigCache::new_unbounded();
         for gateway_admin_user_id in initial_gateway_admin_ids {
             let mut default_roles = HashMap::new();
             default_roles.insert(Platform::Gateway, [Role::GatewayAdmin].into());
             let config = UserConfig::new(default_roles);
-            user_cache
+            // the user who configured as gateway admin can not be modified.
+            gateway_admin_user_cache
                 .insert_user_config(gateway_admin_user_id, config)
                 .await;
         }
         Self {
             pg_pool,
             user_cache,
+            gateway_admin_user_cache,
         }
     }
 }
@@ -67,6 +71,10 @@ impl UserRepository for UserRepositoryImpl {
 
     async fn get_user_config(&self, user_id: &str) -> Result<Option<Arc<UserConfig>>> {
         let mut user_config = self.user_cache.get_user_config(user_id).await;
+        if let Some(user_config) = user_config {
+            return Ok(Some(user_config));
+        }
+        user_config = self.gateway_admin_user_cache.get_user_config(user_id).await;
         if let Some(user_config) = user_config {
             return Ok(Some(user_config));
         }

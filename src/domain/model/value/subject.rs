@@ -18,7 +18,7 @@ pub enum Subject {
 }
 
 impl Subject {
-    pub fn get_subject(&self) -> &str {
+    pub fn get_subject_value(&self) -> &str {
         match self {
             Subject::FromCookie { value, .. } => value,
             Subject::FromAuthToken { value, .. } => value,
@@ -33,7 +33,7 @@ impl Subject {
     }
 
     pub fn get_suggest_cache_key(&self) -> String {
-        let subject = self.get_subject();
+        let subject = self.get_subject_value();
         let iat = self.get_issue_at().unwrap_or(0);
         format!("{subject}:{iat}")
     }

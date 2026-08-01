@@ -4,10 +4,13 @@ use aide::axum::{
 };
 use axum::{Json, extract::Query};
 use http::{HeaderMap, StatusCode};
+use tracing::Level;
 
 use crate::{
     application::factory,
-    common::error_to_http_status::to_http_error,
+    common::{
+        error_to_http_status::to_http_error, sentry_ext::SentryError, tracing_ext::TracingResultExt,
+    },
     domain::model::{
         entity::user_config::{UserConfigAdd, UserConfigEdit},
         value::{platform::Platform, role::Role},
@@ -51,6 +54,8 @@ async fn get_current_user(
     let (current_user_id, user_roles) = user_privilege_app
         .get_user_roles(headers)
         .await
+        .log_if_error(Level::ERROR)
+        .report_sentry()
         .map_err(to_http_error)?;
     Ok(Json(GetCurrentUserResponse {
         user_id: current_user_id,
@@ -79,11 +84,12 @@ async fn add_user_config(
         roles: request.roles.iter().map(Role::from_str).collect(),
     };
     let user_manage_svc = factory::get_user_manage_svc().await;
-    let result = user_manage_svc.add_new_user_config(user_config_add).await;
-    if let Some(err) = result.as_ref().err() {
-        tracing::error!(error = ?err, "Failed to add user");
-    }
-    let config_id = result.map_err(to_http_error)?;
+    let config_id = user_manage_svc
+        .add_new_user_config(user_config_add)
+        .await
+        .log_if_error(Level::ERROR)
+        .report_sentry()
+        .map_err(to_http_error)?;
 
     let response = AddUserConfigResponse { config_id };
     Ok(Json(response))
@@ -107,6 +113,8 @@ async fn edit_user_config(
     user_manage_svc
         .edit_new_user_config(user_config_edit)
         .await
+        .log_if_error(Level::ERROR)
+        .report_sentry()
         .map_err(to_http_error)?;
     Ok(Json(EditUserConfigResponse {
         result: "Ok".to_owned(),
@@ -121,6 +129,8 @@ async fn del_user_config(
     user_manage_svc
         .delete_user_config(request.config_id)
         .await
+        .log_if_error(Level::ERROR)
+        .report_sentry()
         .map_err(to_http_error)?;
     Ok(Json(DeleteUserConfigResponse {
         result: "Ok".to_owned(),
@@ -135,6 +145,8 @@ async fn list_user_configs_by_ids(
     let configs = user_manage_svc
         .list_user_config_by_user_ids(request.user_ids)
         .await
+        .log_if_error(Level::ERROR)
+        .report_sentry()
         .map_err(to_http_error)?
         .into_iter()
         .map(|entity| UserConfigDto {
@@ -159,6 +171,8 @@ async fn list_user_privileges(
     let privileges = user_privilege_app
         .list_user_privilege(headers, platform)
         .await
+        .log_if_error(Level::ERROR)
+        .report_sentry()
         .map_err(to_http_error)?
         .into_iter()
         .map(|p| {

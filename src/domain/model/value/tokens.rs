@@ -1,14 +1,11 @@
-use anyhow::Context;
+use anyhow::{Context, Result};
 use cookie::{Cookie, time::OffsetDateTime};
 use enum_as_inner::EnumAsInner;
 use enum_kinds::EnumKind;
 use jsonwebtoken::{TokenData, dangerous::insecure_decode};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    common::pingora_errors::forbidden,
-    domain::model::value::authorization_header::AuthorizationHeader,
-};
+use crate::domain::model::value::authorization_header::AuthorizationHeader;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JwtTokenPayload {
@@ -92,7 +89,7 @@ impl Tokens {
         }
     }
 
-    pub fn from_auth_header(auth_header: AuthorizationHeader) -> pingora::Result<Tokens> {
+    pub fn from_auth_header(auth_header: AuthorizationHeader) -> Result<Tokens> {
         let tokens = match auth_header {
             AuthorizationHeader::Basic { username, .. } => {
                 Tokens::PlaintextFromAuthHeader { subject: username }
@@ -108,8 +105,7 @@ impl Tokens {
                         "Failed to parse auth token, only support jwt for now"
                     ))
                     .context(format!("token = {token:?}"))
-                    .context("Failed to parse auth token")
-                    .map_err(|_| forbidden())?;
+                    .context("Failed to parse auth token")?;
                 }
             }
         };
@@ -118,8 +114,8 @@ impl Tokens {
 
     pub fn from_cookies(
         user_cookie: &str,
-        access_token_name: Option<&String>,
-        refresh_token_name: Option<&String>,
+        access_token_name: Option<&str>,
+        refresh_token_name: Option<&str>,
     ) -> Tokens {
         let cookies = Cookie::split_parse(user_cookie);
         let user_tokens = cookies
@@ -167,7 +163,7 @@ impl Tokens {
         user_tokens
     }
 
-    pub fn add_cookie_access_token(&mut self, cookie: Cookie<'_>) -> anyhow::Result<()> {
+    pub fn add_cookie_access_token(&mut self, cookie: Cookie<'_>) -> Result<()> {
         let value = cookie.value();
         let token = JwtToken::parse(value)?;
         match self {
@@ -179,7 +175,7 @@ impl Tokens {
         Ok(())
     }
 
-    pub fn add_cookie_refresh_token(&mut self, cookie: Cookie<'_>) -> anyhow::Result<()> {
+    pub fn add_cookie_refresh_token(&mut self, cookie: Cookie<'_>) -> Result<()> {
         let value = cookie.value();
         let token = JwtToken::parse(value)?;
         match self {

@@ -1,14 +1,13 @@
 use std::collections::{HashMap, HashSet};
 
-use anyhow::{Context, Result};
-use http::{HeaderMap, header::COOKIE};
+use anyhow::Result;
+use http::HeaderMap;
 
 use crate::{
-    common::error_types::ErrorKind,
     domain::{
         model::{
-            entity::privilege_rule::PrivilegeRule,
-            value::{platform::Platform, role::Role, subject::Subject, tokens::Tokens},
+            entity::{privilege_rule::PrivilegeRule, user_info::UserSubject},
+            value::{platform::Platform, role::Role},
         },
         service::{
             cluster_manage_service::ClusterManageService, user_manage_service::UserManageService,
@@ -38,36 +37,42 @@ impl UserPrivilegeApp {
         &self,
         headers: HeaderMap,
     ) -> Result<(Option<String>, HashMap<Platform, HashSet<Role>>)> {
-        let user_cookie = headers.get(COOKIE).map(|v| v.to_str().ok()).flatten();
-        let mut current_user_id = None;
-        let user_roles = match user_cookie {
-            None => [(Platform::Gateway, [Role::Anonymous].into())].into(),
-            Some(user_cookie) => {
-                let settings = Settings::get();
-                let access_token_name = settings.auth_args.svc_cookie_access_token_key.as_ref();
-                let refresh_token_name = settings.auth_args.svc_cookie_refresh_token_key.as_ref();
-                let tokens =
-                    Tokens::from_cookies(user_cookie, access_token_name, refresh_token_name);
-                let sub = Subject::try_from(&tokens).context(ErrorKind::Forbidden)?;
-                let user_id = sub.get_subject().to_string();
-                current_user_id = Some(user_id.clone());
-                let mut roles = self
-                    .user_manage_svc
-                    .list_user_roles_by_user_id(user_id)
-                    .await?;
-                // enrich basic roles for gateway
-                roles.iter_mut().for_each(|(_, roles)| {
-                    roles.insert(Role::Anonymous);
-                    roles.insert(Role::Untagged);
-                });
-                roles
-                    .entry(Platform::Gateway)
-                    .or_insert(HashSet::new())
-                    .insert(Role::Untagged);
-                roles
+        let settings = Settings::get();
+        let access_token_name = settings
+            .auth_args
+            .svc_cookie_access_token_key
+            .as_ref()
+            .map(|s| s.as_str());
+        let refresh_token_name = settings
+            .auth_args
+            .svc_cookie_refresh_token_key
+            .as_ref()
+            .map(|s| s.as_str());
+        let user_subject =
+            UserSubject::from_header(&headers, access_token_name, refresh_token_name)?;
+
+        let user_subject = match user_subject {
+            Some(user_subject) => user_subject,
+            None => {
+                return Ok((None, [(Platform::Gateway, [Role::Anonymous].into())].into()));
             }
         };
-        Ok((current_user_id, user_roles))
+
+        let user_id = user_subject.subject.get_subject_value().to_string();
+        let mut roles = self
+            .user_manage_svc
+            .list_user_roles_by_user_id(user_id.clone())
+            .await?;
+        // enrich basic roles for gateway
+        roles.iter_mut().for_each(|(_, roles)| {
+            roles.insert(Role::Anonymous);
+            roles.insert(Role::Untagged);
+        });
+        roles
+            .entry(Platform::Gateway)
+            .or_insert(HashSet::new())
+            .extend([Role::Anonymous, Role::Untagged]);
+        Ok((Some(user_id), roles))
     }
 
     pub async fn list_user_privilege(
@@ -77,6 +82,10 @@ impl UserPrivilegeApp {
     ) -> Result<Vec<PrivilegeRule>> {
         let platform = platform.unwrap_or(Platform::Gateway);
         let (_, user_roles) = self.get_user_roles(headers).await?;
+        let is_gateway_admin = user_roles
+            .iter()
+            .find(|(_, roles)| roles.contains(&Role::GatewayAdmin))
+            .is_some();
         let roles = match user_roles.get(&platform) {
             Some(roles) => roles,
             None => return Ok(vec![]),
@@ -90,7 +99,12 @@ impl UserPrivilegeApp {
                 let backend_apis = p
                     .backend_apis
                     .iter()
-                    .filter(|api| api.roles.intersection(roles).count() > 0)
+                    .filter(|api| {
+                        if is_gateway_admin {
+                            return true;
+                        }
+                        api.roles.intersection(roles).count() > 0
+                    })
                     .cloned()
                     .collect::<Vec<_>>();
                 if backend_apis.is_empty() {

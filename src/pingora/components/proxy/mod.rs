@@ -11,6 +11,7 @@ use crate::{
     settings::Settings,
 };
 
+pub mod fail_to_proxy;
 pub mod http_proxy;
 
 pub fn setup(

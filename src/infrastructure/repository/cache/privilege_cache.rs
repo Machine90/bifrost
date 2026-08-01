@@ -7,8 +7,6 @@ use crate::domain::model::{
     value::{platform::Platform, role::Role},
 };
 
-const DEFAULT_MAX_PRIVILEGE_CACHE_ENTRY_COUNT: u64 = 100_000;
-
 #[derive(Clone)]
 pub(crate) struct PrivilegeCache {
     cache: Arc<Cache<i32, Arc<PrivilegeRule>>>,
@@ -23,10 +21,9 @@ impl Debug for PrivilegeCache {
 }
 
 impl PrivilegeCache {
-    pub(crate) fn new(max_capacity: Option<u64>) -> Self {
-        let cap = max_capacity.unwrap_or(DEFAULT_MAX_PRIVILEGE_CACHE_ENTRY_COUNT);
+    pub(crate) fn new() -> Self {
         Self {
-            cache: Arc::new(Cache::new(cap)),
+            cache: Arc::new(Cache::builder().build()),
         }
     }
 

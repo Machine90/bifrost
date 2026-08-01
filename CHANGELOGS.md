@@ -1,5 +1,18 @@
 # CHANGELOGS
 
+## [20260731 MR-1](https://github.com/Machine90/bifrost/pull/1)
+**Features**
+- Support to query user privilege and info by using JWT of Authorization header.
+
+**Bugfix**
+- Fixed issue of getting incorrect user roles when querying user privileges.
+
+**Optimize**
+- Added json type error response with error message.
+
+### Bump version:
+- bifrost: 0.1.8
+
 ## [20260728]
 **Changes**
 - Added API function for getting current users privilege.

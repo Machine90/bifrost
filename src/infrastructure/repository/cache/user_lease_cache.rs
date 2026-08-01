@@ -24,12 +24,12 @@ impl UserLeaseCache {
     }
 
     pub(crate) fn contains(&self, user_info: &UserBaseInfo) -> bool {
-        let key = user_info.user_subject.get_suggest_cache_key();
+        let key = user_info.user_subject.subject.get_suggest_cache_key();
         self.user_lease_map.contains_key(&key)
     }
 
     pub(crate) async fn add(&self, user_info: &UserBaseInfo) {
-        let key = user_info.user_subject.get_suggest_cache_key();
+        let key = user_info.user_subject.subject.get_suggest_cache_key();
         self.user_lease_map.insert(key, Arc::new(())).await
     }
 }

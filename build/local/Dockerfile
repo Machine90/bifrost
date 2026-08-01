@@ -10,11 +10,11 @@ RUN apk add libgcc libpq cmake
 # setup application
 WORKDIR /home/gateway
 RUN mkdir -p /home/gateway
-RUN mkdir -p /home/gateway/filters
+RUN mkdir -p /home/gateway/build/local/filters/
 
 COPY ./bifrost /home/gateway/bifrost
 COPY ./config.toml /home/gateway/config.toml
-COPY ./filters/* /home/gateway/filters/
+COPY ./filters/* /home/gateway/build/local/filters/
 
 EXPOSE 8000
 

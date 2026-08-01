@@ -236,7 +236,7 @@ impl ClusterRepositoryImpl {
         Self {
             pg_pool,
             router_cache,
-            privilege_cache: PrivilegeCache::new(None),
+            privilege_cache: PrivilegeCache::new(),
             service_instance_cache,
         }
     }
